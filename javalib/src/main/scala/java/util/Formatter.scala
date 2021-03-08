@@ -533,30 +533,35 @@ final class Formatter private (private var dest: Appendable,
 
     val rounded = x.round(precision = 1 + digitsAfterDot)
 
-    val signStr = if (rounded.negative) "-" else ""
+    // Worst case: -d.<digitsAfterPos>e+2147483647
+    val builder = new JStringBuilder(15 + digitsAfterDot)
+
+    // Sign
+    if (rounded.negative)
+      builder.append('-')
 
     val intStr               = rounded.unscaledValue
     val dotPos               = 1
     val fractionalDigitCount = intStr.length() - dotPos
     val missingZeros         = digitsAfterDot - fractionalDigitCount
 
-    val significandStr = {
-      val integerPart    = intStr.substring(0, dotPos)
-      val fractionalPart = intStr.substring(dotPos) + strOfZeros(missingZeros)
-      if (fractionalPart == "" && !forceDecimalSep)
-        integerPart
-      else
-        integerPart + "." + fractionalPart
+    // Significand
+    builder.append(intStr, 0, dotPos)
+    if (fractionalDigitCount + missingZeros > 0 || forceDecimalSep) {
+      builder.append('.')
+      builder.append(intStr, dotPos, intStr.length())
+      appendZeros(builder, missingZeros)
     }
 
+    // Exponent
     val exponent        = fractionalDigitCount - rounded.scale
-    val exponentSign    = if (exponent < 0) "-" else "+"
-    val exponentAbsStr0 = Math.abs(exponent).toString()
-    val exponentAbsStr =
-      if (exponentAbsStr0.length() == 1) "0" + exponentAbsStr0
-      else exponentAbsStr0
+    builder.append(if (exponent < 0) "e-" else "e+")
+    val exponentAbsStr = Math.abs(exponent).toString()
+    if (exponentAbsStr.length() == 1)
+      builder.append('0')
+    builder.append(exponentAbsStr)
 
-    signStr + significandStr + "e" + exponentSign + exponentAbsStr
+    builder.toString()
   }
 
   private def decimalNotation(x: Decimal,
@@ -565,28 +570,38 @@ final class Formatter private (private var dest: Appendable,
 
     val rounded = x.setScale(scale)
 
-    val signStr = if (rounded.negative) "-" else ""
-
     val intStr    = rounded.unscaledValue
     val intStrLen = intStr.length()
 
-    val minDigits = 1 + scale // 1 before the '.' plus `scale` after it
-    val expandedIntStr =
-      if (intStrLen >= minDigits) intStr
-      else strOfZeros(minDigits - intStrLen) + intStr
-    val dotPos = expandedIntStr.length() - scale
+    // Overapproximation of the worst case: -<intStr>.<scale 0's>
+    val builder = new JStringBuilder(2 + intStrLen + scale)
 
-    val integerPart = signStr + expandedIntStr.substring(0, dotPos)
-    if (scale == 0 && !forceDecimalSep)
-      integerPart
-    else
-      integerPart + "." + expandedIntStr.substring(dotPos)
+    if (rounded.negative)
+      builder.append('-')
+
+    val minDigits = 1 + scale // 1 before the '.' plus `scale` after it
+    if (intStrLen > scale) {
+      // There is at least one digit of intStr before the '.'
+      // (we always take this branch when scale == 0)
+      val dotPos = intStrLen - scale
+      builder.append(intStr, 0, dotPos)
+      if (scale > 0 || forceDecimalSep) {
+        builder.append('.')
+        builder.append(intStr, dotPos, intStrLen)
+      }
+    } else {
+      // All the digits of intStr are to the right of the '.'
+      builder.append("0.")
+      appendZeros(builder, scale - intStrLen)
+      builder.append(intStr)
+    }
+
+    builder.toString()
   }
 
   private def generalScientificNotation(x: Decimal,
                                         precision: Int,
                                         forceDecimalSep: Boolean): String = {
-
     val p =
       if (precision == 0) 1
       else precision
@@ -1005,20 +1020,19 @@ final class Formatter private (private var dest: Appendable,
 
 object Formatter {
 
-  private def strOfZeros(count: Int): String = {
+  private def appendZeros(builder: JStringBuilder, count: Int): builder.type = {
     val twentyZeros = "00000000000000000000"
     if (count <= 20) {
-      twentyZeros.substring(0, count)
+      builder.append(twentyZeros, 0, count)
     } else {
-      val builder   = new JStringBuilder(count)
       var remaining = count
       while (remaining > 20) {
         builder.append(twentyZeros)
         remaining -= 20
       }
       builder.append(twentyZeros, 0, remaining)
-      builder.toString()
     }
+    builder
   }
 
   @inline
@@ -1251,10 +1265,9 @@ object Formatter {
       if (rounded.isZero || rounded.scale == newScale) {
         rounded
       } else {
-        new Decimal(
-          negative,
-          rounded.unscaledValue + strOfZeros(newScale - rounded.scale),
-          newScale)
+        val newUnscaledValueBuilder = new JStringBuilder(rounded.unscaledValue)
+        appendZeros(newUnscaledValueBuilder, newScale - rounded.scale)
+        new Decimal(negative, newUnscaledValueBuilder.toString(), newScale)
       }
     }
 
