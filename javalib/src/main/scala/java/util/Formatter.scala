@@ -496,19 +496,20 @@ final class Formatter private (private var dest: Appendable,
   }
 
   @inline private def checkIllegalFormatFlags(flags: Flags): Unit = {
-    if (flags.hasAllOf(LeftAlign | ZeroPad) || flags.hasAllOf(
-          PositivePlus | PositiveSpace))
+    if (flags.hasAllOf(LeftAlign | ZeroPad) ||
+          flags.hasAllOf(PositivePlus | PositiveSpace)) {
       throwIllegalFormatFlagsException(flags)
+    }
   }
 
   @inline private def checkFlagsConversionMismatch(conversionLower: Char,
                                                    flags: Flags,
                                                    illegalFlags: Int): Unit = {
-
-    if (flags.hasAnyOf(illegalFlags))
+    if (flags.hasAnyOf(illegalFlags)) {
       throwFormatFlagsConversionMismatchException(conversionLower,
                                                   flags,
                                                   illegalFlags)
+    }
   }
 
   /* Should in theory be a method of `Flags`. See the comment on that class
@@ -609,14 +610,15 @@ final class Formatter private (private var dest: Appendable,
      */
     val rounded          = x.round(p)
     val orderOfMagnitude = (rounded.precision - 1) - rounded.scale
-    if (orderOfMagnitude >= -4 && orderOfMagnitude < p)
+    if (orderOfMagnitude >= -4 && orderOfMagnitude < p) {
       decimalNotation(rounded,
                       scale = Math.max(0, p - orderOfMagnitude - 1),
                       forceDecimalSep)
-    else
+    } else {
       computerizedScientificNotation(rounded,
                                      digitsAfterDot = p - 1,
                                      forceDecimalSep)
+    }
   }
 
   /** Format an argument for the 'a' conversion.
@@ -627,8 +629,6 @@ final class Formatter private (private var dest: Appendable,
    *  There is some logic that is duplicated from
    *  `java.lang.Double.toHexString()`. It cannot be factored out because:
    *
-   *  - the javalanglib and javalib do not see each other's custom method
-   *    (could be solved if we merged them),
    *  - this method deals with subnormals in a very weird way when the
    *    precision is set and is <= 12, and
    *  - the handling of padding is fairly specific to `Formatter`, and would
@@ -1248,13 +1248,14 @@ object Formatter {
       assert(rounded.isZero || rounded.scale <= newScale,
              "roundAtPos returned a non-zero value with a scale too large")
 
-      if (rounded.isZero || rounded.scale == newScale)
+      if (rounded.isZero || rounded.scale == newScale) {
         rounded
-      else
+      } else {
         new Decimal(
           negative,
           rounded.unscaledValue + strOfZeros(newScale - rounded.scale),
           newScale)
+      }
     }
 
     /** Rounds the number at the given position in its `unscaledValue`.
@@ -1289,12 +1290,13 @@ object Formatter {
 
         if (digits.charAt(roundingPos) < '5') {
           // Truncate at roundingPos
-          if (roundingPos == 0)
+          if (roundingPos == 0) {
             Decimal.zero(negative)
-          else
+          } else {
             new Decimal(negative,
                         digits.substring(0, roundingPos),
                         scaleAtPos(roundingPos))
+          }
         } else {
           // Truncate and increment at roundingPos
 
@@ -1303,11 +1305,14 @@ object Formatter {
           while (lastNonNinePos >= 0 && digits.charAt(lastNonNinePos) == '9')
             lastNonNinePos -= 1
 
-          val newUnscaledValue =
-            if (lastNonNinePos < 0) "1"
-            else
-              digits.substring(0, lastNonNinePos) + (digits.charAt(
-                lastNonNinePos) + 1).toChar
+          val newUnscaledValue = {
+            if (lastNonNinePos < 0) {
+              "1"
+            } else {
+              digits.substring(0, lastNonNinePos) +
+                (digits.charAt(lastNonNinePos) + 1).toChar
+            }
+          }
 
           val newScale = scaleAtPos(lastNonNinePos + 1)
 
